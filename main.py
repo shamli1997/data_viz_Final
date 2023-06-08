@@ -1,6 +1,7 @@
 
 import streamlit as st
 import pandas as pd
+import pickle
 import folium
 from streamlit_folium import folium_static
 
@@ -12,11 +13,13 @@ available_types = data['Type'].unique()
 
 # Define the marker colors for each location type
 marker_colors = {
-    'E-waste': 'blue',
-    'Beverage Container': 'green',
+    'Electronics': 'blue',
+    'Metal': 'green',
     'Used Oil': 'red',
     'Paper' : 'black',
-    'Plastic':'purple'
+    'Plastic':'orange',
+    'Glass': 'pink',
+    'Household Hazardous Waste (HHW)':'lightred'
 }
 
 # Filter the data based on the selected type
@@ -25,13 +28,19 @@ def filter_data(selected_type):
     return filtered_data
 
 # Display the map with markers
-def display_map(filtered_data, marker_color):
+def display_map(selected_type, marker_color):
+
+    filtered_data = filter_data(selected_type)
+
     if filtered_data.empty:
-        st.error("No data available for the selected type.")
+        st.error("No Recycling Centers Found!")
+
     else:
         # Create a folium map centered on the first data point
-        map = folium.Map(location=[filtered_data['Latitude'].iloc[0], filtered_data['Longitude'].iloc[0]], zoom_start=10)
-
+        try:
+            map = folium.Map(location=[filtered_data['Latitude'].iloc[0], filtered_data['Longitude'].iloc[0]], zoom_start=10)
+        except:
+            print("Recycling Location Name: ",filtered_data['Recycling Location Name'],filtered_data)
         # Add markers for each data point with the specified color
         for index, row in filtered_data.iterrows():
             location = [row['Latitude'], row['Longitude']]
@@ -39,27 +48,35 @@ def display_map(filtered_data, marker_color):
             address = row['Address']
             city = row['City']
             popup_text = f"{name}<br>{address}, {city}"
-            folium.Marker(location, popup=popup_text, icon=folium.Icon(color=marker_color)).add_to(map)
+            folium.Marker(location, popup=popup_text, icon=folium.Icon(color=marker_color[selected_type])).add_to(map)
 
         # Display the map
         folium_static(map)
 
 # Streamlit app
 def main():
-    # Title and description
-    st.title("Recycling Locations Map")
+    st.title("CalRecycle Data Vizualisation")
+
+    with open('model.pkl', 'rb') as f:
+        model = pickle.load(f)
+
+    with open('vectors.pkl', 'rb') as f:
+        vectorizer = pickle.load(f)
+        
+    waste = st.text_input("Enter Waste: ")  
+    if waste != "":  
     
-    selected_type = st.selectbox("Select Type", available_types)
-    st.write("where do I recycle the ", selected_type,"?")
+        text_features = vectorizer.transform([waste])
 
-    # Filter the data based on the selected type
-    filtered_data = filter_data(selected_type)
+        # Predict the category
+        category = model.predict(text_features)[0]
+        st.success(f"Our model predicted this waste to be of type : {category}")
 
-    # Get the marker color for the selected type
-    marker_color = marker_colors[selected_type]
+        # Title and description
+        st.title("Recycling Locations Map")
+        
 
-    # Display the map with markers
-    display_map(filtered_data, marker_color)
+        display_map(category, marker_colors)
 
 if __name__ == '__main__':
     main()
